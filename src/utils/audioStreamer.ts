@@ -59,9 +59,13 @@ export class AudioLiveController {
   }
 
   // Start microphone capture at 16kHz
-  public async startMicrophone(): Promise<void> {
+  public async startMicrophone(): Promise<boolean> {
     try {
       await this.ensureContext();
+
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        return false;
+      }
 
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       this.inputAudioCtx = new AudioContextClass({ sampleRate: 16000 });
@@ -102,9 +106,11 @@ export class AudioLiveController {
       this.inputSource.connect(this.scriptProcessor);
       this.scriptProcessor.connect(this.inputAudioCtx.destination);
       this.isRecording = true;
-    } catch (err) {
-      console.error('Microphone start error:', err);
-      throw err;
+      return true;
+    } catch (err: any) {
+      // Gracefully handle denied permission or device in-use without unhandled rejection
+      this.isRecording = false;
+      return false;
     }
   }
 

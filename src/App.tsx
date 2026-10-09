@@ -22,6 +22,7 @@ import {
   Copy,
   AlertCircle,
   Square,
+  Play,
 } from 'lucide-react';
 
 export default function App() {
@@ -40,7 +41,6 @@ export default function App() {
   const audioControllerRef = useRef<AudioLiveController | null>(null);
   const speechRecognizerRef = useRef<SpeechRecognitionService | null>(null);
   const animFrameRef = useRef<number | null>(null);
-  const isAutoListeningRef = useRef<boolean>(false);
 
   // Initialize Audio and Speech Recognition
   useEffect(() => {
@@ -67,14 +67,14 @@ export default function App() {
     };
     animFrameRef.current = requestAnimationFrame(updateVisualizer);
 
-    // Initial warm welcoming message from Oro
+    // Initial welcoming message from Oro
     const initialWelcome: ChatMessage = {
       id: 'welcome-0',
       role: 'assistant',
       content:
         language === 'fr'
-          ? "Bonjour et bienvenue. Je suis Oro, l'ambassadeur vocal d'Aayushi Bhandari. Je suis à votre disposition pour vous présenter son parcours dans le management du luxe, ses réalisations à Paris et son expertise alliant rigueur financière et création de prestige."
-          : "Good day and welcome. I am Oro, personal voice ambassador representing Aayushi Bhandari. I am at your service to introduce her background in luxury brand management, her Paris credentials, and her distinctive balance of analytical acumen and prestige storytelling.",
+          ? "Bonjour et bienvenue. Je suis Oro, l'ambassadeur vocal d'Aayushi Bhandari. Je suis à votre entière disposition pour vous présenter son parcours dans l'univers du prestige et du luxe à Paris, ses réalisations et sa recherche active de stage."
+          : "Good day. I am Oro, personal voice ambassador representing Aayushi Bhandari. I am at your service to introduce her background in luxury brand management, her flagship experience at DLF Emporio, and her current pursuits in Paris.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       language,
     };
@@ -96,14 +96,58 @@ export default function App() {
             ...prev[0],
             content:
               language === 'fr'
-                ? "Bonjour et bienvenue. Je suis Oro, l'ambassadeur vocal d'Aayushi Bhandari. Je suis à votre disposition pour vous présenter son parcours dans le management du luxe, ses réalisations à Paris et son expertise alliant rigueur financière et création de prestige."
-                : "Good day and welcome. I am Oro, personal voice ambassador representing Aayushi Bhandari. I am at your service to introduce her background in luxury brand management, her Paris credentials, and her distinctive balance of analytical acumen and prestige storytelling.",
+                ? "Bonjour et bienvenue. Je suis Oro, l'ambassadeur vocal d'Aayushi Bhandari. Je suis à votre entière disposition pour vous présenter son parcours dans l'univers du prestige et du luxe à Paris, ses réalisations et sa recherche active de stage."
+                : "Good day. I am Oro, personal voice ambassador representing Aayushi Bhandari. I am at your service to introduce her background in luxury brand management, her flagship experience at DLF Emporio, and her current pursuits in Paris.",
             language,
           },
         ];
       }
       return prev;
     });
+  }, [language]);
+
+  // Stop Oro speaking or stop listening
+  const handleStopAudio = () => {
+    if (audioControllerRef.current) {
+      audioControllerRef.current.interruptPlayback();
+    }
+    if (speechRecognizerRef.current) {
+      speechRecognizerRef.current.stop();
+    }
+    setStatus('idle');
+    setLiveTranscription('');
+  };
+
+  // Play Oro's signature spoken voice greeting
+  const handlePlayGreeting = useCallback(async () => {
+    const greetingText =
+      language === 'fr'
+        ? "Bonjour et bienvenue. Je suis Oro, l'ambassadeur vocal d'Aayushi Bhandari. Je suis à votre disposition pour vous présenter son parcours dans le management du luxe, son expérience à DLF Emporio et sa recherche active de stage à Paris."
+        : "Good day. I am Oro, personal voice ambassador representing Aayushi Bhandari. I am delighted to introduce her background in luxury brand management, her work at DLF Emporio, and her current pursuits in Paris.";
+
+    setStatus('speaking');
+    setNotice(null);
+
+    try {
+      const controller = audioControllerRef.current;
+      if (controller) {
+        await controller.ensureContext();
+      }
+
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: greetingText, language }),
+      });
+      const data = await res.json();
+      if (data.audio && controller) {
+        await controller.playWavBase64(data.audio);
+      }
+    } catch (e) {
+      console.warn('Greeting playback warning:', e);
+    } finally {
+      setStatus('idle');
+    }
   }, [language]);
 
   // Send a message and have Oro respond with text + speech
@@ -170,7 +214,6 @@ export default function App() {
         console.error('Send message error:', err);
         setIsThinking(false);
         setStatus('idle');
-        setNotice('Connection note: Responding with default luxury greeting.');
 
         const fallbackMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -188,19 +231,7 @@ export default function App() {
     [language, messages]
   );
 
-  // Stop Oro speaking or stop listening
-  const handleStopAudio = () => {
-    if (audioControllerRef.current) {
-      audioControllerRef.current.interruptPlayback();
-    }
-    if (speechRecognizerRef.current) {
-      speechRecognizerRef.current.stop();
-    }
-    setStatus('idle');
-    setLiveTranscription('');
-  };
-
-  // Toggle Voice Interaction (Start Listening / Stop)
+  // Toggle Voice Interaction (Start Listening / Fallback to Spoken Voice)
   const toggleVoiceInteraction = useCallback(async () => {
     const controller = audioControllerRef.current;
     const recognizer = speechRecognizerRef.current;
@@ -211,18 +242,27 @@ export default function App() {
     }
 
     if (status === 'listening') {
-      // User tapped to finish speaking
       recognizer?.stop();
       controller?.stopMicrophone();
       setStatus('idle');
       return;
     }
 
-    // Start listening
+    // Try starting microphone
     try {
       if (controller) {
         await controller.ensureContext();
-        await controller.startMicrophone();
+        const micGranted = await controller.startMicrophone();
+        if (!micGranted) {
+          setNotice(
+            language === 'fr'
+              ? "Microphone non accessible dans cette fenêtre. Oro s'exprime à voix haute lorsque vous choisissez une question ci-dessous !"
+              : 'Microphone access is not enabled in this browser window. Oro will speak aloud whenever you select an inquiry below!'
+          );
+          // Play spoken response so user experiences Oro's voice immediately!
+          handlePlayGreeting();
+          return;
+        }
       }
 
       setStatus('listening');
@@ -240,8 +280,7 @@ export default function App() {
             recognizer.stop();
             handleSendMessage(finalText, language);
           },
-          onError: (errMsg) => {
-            console.warn('Speech error:', errMsg);
+          onError: () => {
             controller?.stopMicrophone();
             setStatus('idle');
           },
@@ -252,16 +291,15 @@ export default function App() {
         });
       } else {
         // Fallback for browsers without speech recognition
-        setNotice('Speech recognition not available in this browser. Please type or click the prompt chips below.');
         controller?.stopMicrophone();
         setStatus('idle');
+        handlePlayGreeting();
       }
     } catch (err: any) {
-      console.error('Failed to start microphone:', err);
       setStatus('idle');
-      setNotice('Microphone permission required. Please allow microphone access or use text prompts.');
+      handlePlayGreeting();
     }
-  }, [status, language, handleSendMessage, liveTranscription]);
+  }, [status, language, handleSendMessage, handlePlayGreeting]);
 
   // Replay audio for a message
   const handleReplayAudio = async (msg: ChatMessage) => {
@@ -309,6 +347,29 @@ export default function App() {
     setCopiedEmail(true);
     setTimeout(() => setCopiedEmail(false), 2000);
   };
+
+  const featuredVoiceInquiries = [
+    {
+      label: 'DLF Emporio Highlight',
+      prompt: "Tell me about Aayushi's luxury experience at DLF Emporio and the Shopping Festival.",
+      lang: 'en' as const,
+    },
+    {
+      label: 'Why Hire Aayushi?',
+      prompt: "What makes Aayushi unique for luxury brand management?",
+      lang: 'en' as const,
+    },
+    {
+      label: 'Inside LVMH Credential',
+      prompt: "What did Aayushi learn from Inside LVMH and is she seeking a Paris luxury internship?",
+      lang: 'en' as const,
+    },
+    {
+      label: 'Présentation en Français 🇫🇷',
+      prompt: "Bonjour Oro, peux-tu présenter Aayushi et son parcours à Paris en français ?",
+      lang: 'fr' as const,
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-[#171412] flex flex-col selection:bg-[#EBDDC8] selection:text-[#171412]">
@@ -447,7 +508,7 @@ export default function App() {
         )}
 
         {activeTab === 'concierge' && (
-          <div className="space-y-8 animate-fade-in">
+          <div className="space-y-6 animate-fade-in">
             {/* Editorial Intro Banner */}
             <div className="text-center max-w-2xl mx-auto space-y-2">
               <span className="text-xs uppercase tracking-widest text-[#9E7437] font-semibold">
@@ -461,14 +522,45 @@ export default function App() {
               </p>
             </div>
 
-            {/* Interactive Oro Orb */}
+            {/* Interactive Oro Orb with Direct Speak and Mic Controls */}
             <OroOrb
               status={status}
               audioEnergy={audioEnergy}
               language={language}
               onToggleLive={toggleVoiceInteraction}
+              onPlayGreeting={handlePlayGreeting}
+              onStopSpeaking={handleStopAudio}
               onLanguageChange={(newLang) => setLanguage(newLang)}
             />
+
+            {/* Instant Spoken Inquiries Bar */}
+            <div className="max-w-4xl mx-auto bg-white/70 backdrop-blur-xs p-4 rounded-2xl border border-[#EAE2D5] shadow-2xs">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <span className="text-xs uppercase tracking-wider text-[#9E7437] font-semibold flex items-center gap-1.5">
+                  <Volume2 className="w-3.5 h-3.5" /> Tap Any Topic to Hear Oro Answer Aloud:
+                </span>
+                <span className="text-[11px] text-[#716860]">Voice Audio Output Active</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                {featuredVoiceInquiries.map((item, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setLanguage(item.lang);
+                      handleSendMessage(item.prompt, item.lang);
+                    }}
+                    className="p-3 text-left rounded-xl bg-[#FAF8F5] hover:bg-[#F3EFE9] border border-[#EAE3D6] hover:border-[#D5C2A5] transition-all cursor-pointer group flex flex-col justify-between"
+                  >
+                    <span className="text-xs font-medium text-[#171412] group-hover:text-[#9E7437]">
+                      {item.label}
+                    </span>
+                    <span className="text-[10px] text-[#716860] mt-1.5 flex items-center gap-1 font-serif italic">
+                      <Play className="w-2.5 h-2.5 fill-[#9E7437] text-[#9E7437]" /> Click to listen
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Live Conversation Stream & Text Interface */}
             <ConversationStream
