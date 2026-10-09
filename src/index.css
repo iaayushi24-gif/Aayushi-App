@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --color-cream-50: #FCFBF9;
+  --color-cream-100: #FAF8F5;
+  --color-cream-200: #F4EFEB;
+  --color-cream-300: #ECE3DA;
+  --color-cream-400: #DFD3C3;
+  --color-gold-300: #DEC79B;
+  --color-gold-400: #CBA86E;
+  --color-gold-500: #B68E4F;
+  --color-gold-600: #9E7437;
+  --color-charcoal-900: #171412;
+  --color-charcoal-800: #26211D;
+  --color-charcoal-700: #3E3732;
+  --color-charcoal-500: #716860;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #FAF8F5;
+  color: #171412;
+}
+
+h1, h2, h3, .font-serif {
+  font-family: var(--font-serif);
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+@keyframes wave-glow {
+  0%, 100% {
+    box-shadow: 0 0 25px rgba(182, 142, 79, 0.25), 0 0 60px rgba(182, 142, 79, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 45px rgba(182, 142, 79, 0.45), 0 0 90px rgba(182, 142, 79, 0.25);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 4s ease-in-out infinite;
+}
+
+.animate-wave-glow {
+  animation: wave-glow 2.5s ease-in-out infinite;
+}
+

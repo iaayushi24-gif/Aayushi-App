@@ -1,0 +1,6 @@
+{
+  "name": "Oro — Voice Concierge for Aayushi Bhandari",
+  "description": "An elegant, minimalist voice assistant representing Aayushi Bhandari, Luxury Brand Management & Marketing professional in Paris.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
